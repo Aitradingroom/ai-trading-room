@@ -1,0 +1,709 @@
+//@version=6
+indicator("SMC Minimal v2", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500, max_bars_back=5000)
+
+// ── Inputs ──
+G1 = "Structure"
+len        = input.int(5, "Swing length (bars each side)", minval=1, group=G1)
+showChoch  = input.bool(true, "CHoCH", group=G1)
+showBos    = input.bool(true, "BOS", group=G1)
+showSwings = input.bool(false, "Swing labels (HH / HL / LH / LL)", group=G1)
+extSrc     = input.string("Wick", "New HH / LL (BOS) confirmed by", options=["Wick", "Close"], group=G1, tooltip="Wick: a new higher high (uptrend) or lower low (downtrend) counts as soon as price trades beyond the last structural swing; the protected low/high then moves to the start of that leg")
+breakSrc   = input.string("Close", "CHoCH confirmed by", options=["Close", "Wick"], group=G1)
+legLen     = input.int(2, "Leg origin: minor swing length", minval=1, group=G1, tooltip="The protected low (high) is the start of the leg that made the new high (low): the lowest low since the last minor swing high before the break")
+pbAtr      = input.float(1.0, "Min pullback before a new HH / LL (x ATR)", minval=0, step=0.1, group=G1, tooltip="A new high counts as a BOS when price pulled back first: either a minor swing low formed, or price dropped at least this many ATR below the leg high (mirror for lows)")
+showProt   = input.bool(true, "Show protected high / low", group=G1)
+
+G2 = "Strong candles (displacement)"
+dispMult = input.float(1.0, "Strong candle: body ≥ x ATR", step=0.1, group=G2)
+markMode = input.string("Structure breaks", "Mark strong candles", options=["Structure breaks", "All strong candles", "Off"], group=G2)
+
+G3 = "Order blocks"
+showOB = input.bool(true, "Order blocks", group=G3)
+obMax  = input.int(3, "Max order blocks per side", minval=1, maxval=20, group=G3)
+
+G4 = "Fair value gaps"
+showFVG   = input.bool(true, "Fair value gaps", group=G4)
+fvgMinAtr = input.float(0.3, "Min gap size (x ATR)", step=0.05, group=G4)
+fvgMax    = input.int(5, "Max gaps per side", minval=1, maxval=30, group=G4)
+
+G5 = "Liquidity"
+showEq     = input.bool(false, "Equal highs / lows (EQH / EQL)", group=G5)
+eqThresh   = input.float(0.1, "Equal threshold (x ATR)", step=0.05, group=G5)
+showPD     = input.bool(false, "Previous day high / low", group=G5)
+showPW     = input.bool(false, "Previous week high / low", group=G5)
+
+G6 = "Premium / Discount"
+showPrem = input.bool(false, "Premium / discount zones", group=G6)
+
+G7 = "Style"
+bullCol  = input.color(#26a69a, "Bullish", group=G7)
+bearCol  = input.color(#ef5350, "Bearish", group=G7)
+bosCol   = input.color(#9598a1, "BOS / neutral", group=G7)
+dispCol  = input.color(#f5c542, "Strong candle dot", group=G7)
+lvlCol   = input.color(#7e57c2, "Liquidity levels", group=G7)
+
+G8 = "Sessions (vertical lines at open / close)"
+showLdn  = input.bool(true, "London", inline="ldn", group=G8)
+sessLdn  = input.session("0800-1700", "", inline="ldn", group=G8, tooltip="Local London time (Europe/London, daylight saving handled)")
+colLdn   = input.color(#2962ff, "", inline="ldn", group=G8)
+showNy   = input.bool(true, "New York", inline="ny", group=G8)
+sessNy   = input.session("0800-1700", "", inline="ny", group=G8, tooltip="Local New York time (America/New_York, daylight saving handled)")
+colNy    = input.color(#ff9800, "", inline="ny", group=G8)
+showTk   = input.bool(false, "Tokyo", inline="tk", group=G8)
+sessTk   = input.session("0900-1800", "", inline="tk", group=G8, tooltip="Local Tokyo time (Asia/Tokyo)")
+colTk    = input.color(#e040fb, "", inline="tk", group=G8)
+showSy   = input.bool(false, "Sydney", inline="sy", group=G8)
+sessSy   = input.session("0700-1600", "", inline="sy", group=G8, tooltip="Local Sydney time (Australia/Sydney, daylight saving handled)")
+colSy    = input.color(#00bcd4, "", inline="sy", group=G8)
+sessLbl  = input.bool(true, "Name label at session open", group=G8)
+showClose = input.bool(true, "Show session close line", group=G8)
+showNext = input.bool(true, "Show next session open (future)", group=G8)
+openSty  = input.string("Dashed", "Open line style", options=["Dashed", "Dotted", "Solid"], inline="os", group=G8)
+closeSty = input.string("Dotted", "Close line style", options=["Dashed", "Dotted", "Solid"], inline="cs", group=G8)
+sessW    = input.int(1, "Line width", minval=1, maxval=5, group=G8)
+sessKeep = input.int(15, "Sessions kept on chart (per market)", minval=1, maxval=60, group=G8)
+sessMaxTf = input.int(60, "Show on timeframes up to (minutes)", minval=1, group=G8)
+
+color NONE = color.new(color.black, 100)
+
+// ── Helpers ──
+f_lowest(int fromBar) =>
+    int n = math.max(0, math.min(bar_index - fromBar, 4999))
+    float v = low
+    int b = bar_index
+    for i = 0 to n
+        if low[i] < v
+            v := low[i]
+            b := bar_index - i
+    [v, b]
+
+f_highest(int fromBar) =>
+    int n = math.max(0, math.min(bar_index - fromBar, 4999))
+    float v = high
+    int b = bar_index
+    for i = 0 to n
+        if high[i] > v
+            v := high[i]
+            b := bar_index - i
+    [v, b]
+
+f_lowVal(int fromBar) =>
+    [v, b] = f_lowest(fromBar)
+    v
+
+f_highVal(int fromBar) =>
+    [v, b] = f_highest(fromBar)
+    v
+
+// start of the leg that made a new high: the most recent low (scanning back from now to fromBar)
+// that has no lower low after it and is lower than the `len` bars before it (a real swing low)
+f_originLow(int fromBar) =>
+    int n = math.max(0, math.min(bar_index - fromBar, 4000))
+    float minAfter = na
+    int res = na
+    for i = 0 to n
+        float lv = low[i]
+        if na(minAfter) or lv <= minAfter
+            bool leftOk = true
+            for k = 1 to len
+                if low[i + k] <= lv
+                    leftOk := false
+                    break
+            if leftOk
+                res := bar_index - i
+                break
+            minAfter := lv
+    if na(res)
+        [v, b] = f_lowest(fromBar)
+        res := b
+    [low[bar_index - res], res]
+
+// start of the leg that made a new low (mirror of f_originLow)
+f_originHigh(int fromBar) =>
+    int n = math.max(0, math.min(bar_index - fromBar, 4000))
+    float maxAfter = na
+    int res = na
+    for i = 0 to n
+        float hv = high[i]
+        if na(maxAfter) or hv >= maxAfter
+            bool leftOk = true
+            for k = 1 to len
+                if high[i + k] >= hv
+                    leftOk := false
+                    break
+            if leftOk
+                res := bar_index - i
+                break
+            maxAfter := hv
+    if na(res)
+        [v, b] = f_highest(fromBar)
+        res := b
+    [high[bar_index - res], res]
+
+f_draw(int x1, float y, string txt, color c, bool up, bool isChoch) =>
+    line.new(x1, y, bar_index, y, color=color.new(c, 25), width=1, style=isChoch ? line.style_dashed : line.style_dotted)
+    label.new(int(math.round((x1 + bar_index) / 2)), y, txt, style=up ? label.style_label_down : label.style_label_up, color=NONE, textcolor=c, size=size.tiny)
+
+// order block candle: last opposite candle at or just before the extreme of the leg
+f_obOffset(int extBar, bool bull) =>
+    int off0 = math.min(bar_index - extBar, 4990)
+    int pick = off0
+    for k = 0 to 5
+        int off = off0 + k
+        bool cond = bull ? close[off] < open[off] : close[off] > open[off]
+        if cond
+            pick := off
+            break
+    pick
+
+float atr = ta.atr(14)
+
+// ── Swings (confirmed pivots, no repaint) ──
+var float swH = na
+var int   swHbar = na
+var bool  swHbroken = true
+var float swL = na
+var int   swLbar = na
+var bool  swLbroken = true
+
+ph = ta.pivothigh(high, len, len)
+pl = ta.pivotlow(low, len, len)
+
+// minor swings: only used to find where the breaking leg started
+var int minHbar = na
+var int minLbar = na
+if not na(ta.pivothigh(high, legLen, legLen))
+    minHbar := bar_index - legLen
+if not na(ta.pivotlow(low, legLen, legLen))
+    minLbar := bar_index - legLen
+
+// raw pivots: swing labels + equal highs / lows (compare with the previous raw pivot)
+var float rawH = na
+var int   rawHbar = na
+var float rawL = na
+var int   rawLbar = na
+var int   trend = 0
+
+if not na(ph)
+    int x = bar_index - len
+    if showSwings
+        label.new(x, ph, na(rawH) ? "H" : ph > rawH ? "HH" : "LH", style=label.style_label_down, color=NONE, textcolor=bosCol, size=size.tiny)
+    if showEq and not na(rawH) and math.abs(ph - rawH) <= eqThresh * atr
+        line.new(rawHbar, rawH, x, ph, color=color.new(lvlCol, 20), style=line.style_dotted)
+        label.new(int(math.round((rawHbar + x) / 2)), math.max(ph, rawH), "EQH", style=label.style_label_down, color=NONE, textcolor=lvlCol, size=size.tiny)
+    rawH := ph
+    rawHbar := x
+    // structural high: in an uptrend only a HIGHER high counts; highs inside the leg are ignored
+    if trend != 1 or na(swH) or ph > swH
+        swH := ph
+        swHbar := x
+        swHbroken := false
+if not na(pl)
+    int x = bar_index - len
+    if showSwings
+        label.new(x, pl, na(rawL) ? "L" : pl < rawL ? "LL" : "HL", style=label.style_label_up, color=NONE, textcolor=bosCol, size=size.tiny)
+    if showEq and not na(rawL) and math.abs(pl - rawL) <= eqThresh * atr
+        line.new(rawLbar, rawL, x, pl, color=color.new(lvlCol, 20), style=line.style_dotted)
+        label.new(int(math.round((rawLbar + x) / 2)), math.min(pl, rawL), "EQL", style=label.style_label_up, color=NONE, textcolor=lvlCol, size=size.tiny)
+    rawL := pl
+    rawLbar := x
+    // structural low: in a downtrend only a LOWER low counts; lows inside the leg are ignored
+    if trend != -1 or na(swL) or pl < swL
+        swL := pl
+        swLbar := x
+        swLbroken := false
+
+// ── Market structure ──
+// Uptrend: every new high above the leg high, made after a pullback (minor swing low), is a BOS;
+// the protected low moves to that pullback low (the start of the leg that made the new high).
+// A close below the protected low is a CHoCH. Downtrend is the mirror image.
+var float strongHigh = na
+var int   strongHighBar = na
+var float strongLow = na
+var int   strongLowBar = na
+var float legHigh = na
+var int   legHighBar = na
+var float legLow = na
+var int   legLowBar = na
+
+bool bullCHoCH = false
+bool bullBOS   = false
+bool bearCHoCH = false
+bool bearBOS   = false
+float bosLevel = na
+int   bosBar   = na
+
+float upSrc  = breakSrc == "Wick" ? high : close   // CHoCH
+float dnSrc  = breakSrc == "Wick" ? low : close
+float upExt  = extSrc == "Wick" ? high : close     // BOS (new HH / LL)
+float dnExt  = extSrc == "Wick" ? low : close
+
+if trend == 0
+    // first structure: break of the first confirmed swing
+    if not na(swH) and close > swH
+        bullBOS := true
+        bosLevel := swH
+        bosBar := swHbar
+        [lo, lb] = f_lowest(math.min(swHbar + 1, bar_index))
+        strongLow := lo
+        strongLowBar := lb
+        trend := 1
+        legHigh := high
+        legHighBar := bar_index
+    else if not na(swL) and close < swL
+        bearBOS := true
+        bosLevel := swL
+        bosBar := swLbar
+        [hi, hb] = f_highest(math.min(swLbar + 1, bar_index))
+        strongHigh := hi
+        strongHighBar := hb
+        trend := -1
+        legLow := low
+        legLowBar := bar_index
+else if trend == 1
+    if not na(strongLow) and dnSrc < strongLow
+        bearCHoCH := true
+    else if high > legHigh
+        if upExt > legHigh and ((not na(minLbar) and minLbar > legHighBar) or (bar_index - legHighBar >= 2 and legHigh - f_lowVal(legHighBar + 1) >= pbAtr * atr))
+            bullBOS := true
+            bosLevel := legHigh
+            bosBar := legHighBar
+            [lo, lb] = f_originLow(math.min(legHighBar + 1, bar_index))
+            strongLow := lo
+            strongLowBar := lb
+        legHigh := high
+        legHighBar := bar_index
+else if trend == -1
+    if not na(strongHigh) and upSrc > strongHigh
+        bullCHoCH := true
+    else if low < legLow
+        if dnExt < legLow and ((not na(minHbar) and minHbar > legLowBar) or (bar_index - legLowBar >= 2 and f_highVal(legLowBar + 1) - legLow >= pbAtr * atr))
+            bearBOS := true
+            bosLevel := legLow
+            bosBar := legLowBar
+            [hi, hb] = f_originHigh(math.min(legLowBar + 1, bar_index))
+            strongHigh := hi
+            strongHighBar := hb
+        legLow := low
+        legLowBar := bar_index
+
+if bullCHoCH and showChoch
+    f_draw(strongHighBar, strongHigh, "CHoCH", bullCol, true, true)
+if bearCHoCH and showChoch
+    f_draw(strongLowBar, strongLow, "CHoCH", bearCol, false, true)
+if bullBOS and showBos
+    f_draw(bosBar, bosLevel, "BOS", bosCol, true, false)
+if bearBOS and showBos
+    f_draw(bosBar, bosLevel, "BOS", bosCol, false, false)
+
+if bullCHoCH
+    // protected low = start of the leg that broke the protected high
+    [lo, lb] = f_originLow(math.min(strongHighBar + 1, bar_index))
+    strongLow := lo
+    strongLowBar := lb
+    strongHigh := na
+    trend := 1
+    legHigh := high
+    legHighBar := bar_index
+
+if bearCHoCH
+    // protected high = start of the leg that broke the protected low
+    [hi, hb] = f_originHigh(math.min(strongLowBar + 1, bar_index))
+    strongHigh := hi
+    strongHighBar := hb
+    strongLow := na
+    trend := -1
+    legLow := low
+    legLowBar := bar_index
+
+// ── Order blocks (removed once price closes through them) ──
+var array<box> obBull = array.new_box()
+var array<box> obBear = array.new_box()
+
+if obBull.size() > 0
+    for i = obBull.size() - 1 to 0
+        box b = obBull.get(i)
+        if close < box.get_bottom(b)
+            box.delete(b)
+            obBull.remove(i)
+        else
+            box.set_right(b, bar_index)
+if obBear.size() > 0
+    for i = obBear.size() - 1 to 0
+        box b = obBear.get(i)
+        if close > box.get_top(b)
+            box.delete(b)
+            obBear.remove(i)
+        else
+            box.set_right(b, bar_index)
+
+if showOB and (bullCHoCH or bullBOS) and not na(strongLowBar)
+    int off = f_obOffset(strongLowBar, true)
+    obBull.unshift(box.new(bar_index - off, high[off], bar_index, low[off], border_color=NONE, bgcolor=color.new(bullCol, 85), text="OB", text_size=size.tiny, text_color=color.new(bullCol, 30), text_halign=text.align_right))
+    if obBull.size() > obMax
+        box.delete(obBull.pop())
+if showOB and (bearCHoCH or bearBOS) and not na(strongHighBar)
+    int off = f_obOffset(strongHighBar, false)
+    obBear.unshift(box.new(bar_index - off, high[off], bar_index, low[off], border_color=NONE, bgcolor=color.new(bearCol, 85), text="OB", text_size=size.tiny, text_color=color.new(bearCol, 30), text_halign=text.align_right))
+    if obBear.size() > obMax
+        box.delete(obBear.pop())
+
+// ── Fair value gaps (removed once filled) ──
+var array<box> fvgUp = array.new_box()
+var array<box> fvgDn = array.new_box()
+
+if fvgUp.size() > 0
+    for i = fvgUp.size() - 1 to 0
+        box b = fvgUp.get(i)
+        if low <= box.get_bottom(b)
+            box.delete(b)
+            fvgUp.remove(i)
+        else
+            box.set_right(b, bar_index)
+if fvgDn.size() > 0
+    for i = fvgDn.size() - 1 to 0
+        box b = fvgDn.get(i)
+        if high >= box.get_top(b)
+            box.delete(b)
+            fvgDn.remove(i)
+        else
+            box.set_right(b, bar_index)
+
+if showFVG and low > high[2] and (low - high[2]) >= fvgMinAtr * atr
+    fvgUp.unshift(box.new(bar_index - 2, low, bar_index, high[2], border_color=NONE, bgcolor=color.new(bullCol, 90), text="FVG", text_size=size.tiny, text_color=color.new(bullCol, 40), text_halign=text.align_right))
+    if fvgUp.size() > fvgMax
+        box.delete(fvgUp.pop())
+if showFVG and high < low[2] and (low[2] - high) >= fvgMinAtr * atr
+    fvgDn.unshift(box.new(bar_index - 2, low[2], bar_index, high, border_color=NONE, bgcolor=color.new(bearCol, 90), text="FVG", text_size=size.tiny, text_color=color.new(bearCol, 40), text_halign=text.align_right))
+    if fvgDn.size() > fvgMax
+        box.delete(fvgDn.pop())
+
+// ── Previous day / week high & low (drawn for the current period only) ──
+[pdh, pdl] = request.security(syminfo.tickerid, "D", [high[1], low[1]], lookahead=barmerge.lookahead_on)
+[pwh, pwl] = request.security(syminfo.tickerid, "W", [high[1], low[1]], lookahead=barmerge.lookahead_on)
+int sinceDay  = nz(ta.barssince(timeframe.change("D")), 0)
+int sinceWeek = nz(ta.barssince(timeframe.change("W")), 0)
+
+var array<line>  lvlLines  = array.new_line()
+var array<label> lvlLabels = array.new_label()
+
+f_level(int x1, float y, string txt) =>
+    lvlLines.push(line.new(x1, y, bar_index + 8, y, color=color.new(lvlCol, 30), style=line.style_dashed))
+    lvlLabels.push(label.new(bar_index + 8, y, txt, style=label.style_label_left, color=NONE, textcolor=lvlCol, size=size.tiny))
+
+// ── Premium / discount of the current dealing range ──
+var array<box> pdBoxes = array.new_box()
+var line eqLine = na
+
+if barstate.islast
+    for l in lvlLines
+        line.delete(l)
+    for lb in lvlLabels
+        label.delete(lb)
+    lvlLines.clear()
+    lvlLabels.clear()
+    if showPD
+        f_level(bar_index - sinceDay, pdh, "PDH")
+        f_level(bar_index - sinceDay, pdl, "PDL")
+    if showPW
+        f_level(bar_index - sinceWeek, pwh, "PWH")
+        f_level(bar_index - sinceWeek, pwl, "PWL")
+
+    for b in pdBoxes
+        box.delete(b)
+    pdBoxes.clear()
+    line.delete(eqLine)
+    if showPrem and trend != 0
+        float top = na
+        float bot = na
+        int x1 = na
+        if trend == 1 and not na(strongLowBar)
+            [hv, hb] = f_highest(strongLowBar)
+            top := hv
+            bot := strongLow
+            x1 := strongLowBar
+        else if trend == -1 and not na(strongHighBar)
+            [lv, lb2] = f_lowest(strongHighBar)
+            top := strongHigh
+            bot := lv
+            x1 := strongHighBar
+        if not na(top) and not na(bot) and top > bot
+            float mid = (top + bot) / 2
+            pdBoxes.push(box.new(x1, top, bar_index + 8, mid, border_color=NONE, bgcolor=color.new(bearCol, 94), text="Premium", text_size=size.tiny, text_color=color.new(bearCol, 40), text_halign=text.align_right, text_valign=text.align_top))
+            pdBoxes.push(box.new(x1, mid, bar_index + 8, bot, border_color=NONE, bgcolor=color.new(bullCol, 94), text="Discount", text_size=size.tiny, text_color=color.new(bullCol, 40), text_halign=text.align_right, text_valign=text.align_bottom))
+            eqLine := line.new(x1, mid, bar_index + 8, mid, color=color.new(bosCol, 40), style=line.style_dotted)
+
+// ── Strong (displacement) candles ──
+bool strong = math.abs(close - open) >= dispMult * atr
+bool isBreak = bullCHoCH or bullBOS or bearCHoCH or bearBOS
+bool mark = markMode == "All strong candles" ? strong : markMode == "Structure breaks" ? strong and isBreak : false
+plotshape(mark and close > open, "Strong bullish candle", shape.circle, location.belowbar, dispCol, size=size.tiny, display=display.pane)
+plotshape(mark and close < open, "Strong bearish candle", shape.circle, location.abovebar, dispCol, size=size.tiny, display=display.pane)
+
+// ── Protected levels (the level whose break is a CHoCH) ──
+plot(showProt and trend == -1 ? strongHigh : na, "Protected high", color.new(bearCol, 50), 1, plot.style_linebr)
+plot(showProt and trend == 1 ? strongLow : na, "Protected low", color.new(bullCol, 50), 1, plot.style_linebr)
+
+// ── Sessions: vertical line at the open (dashed) and at the close (dotted) ──
+var array<line>  sessLinesLdn = array.new_line()
+var array<line>  sessLinesNy  = array.new_line()
+var array<line>  sessLinesTk  = array.new_line()
+var array<line>  sessLinesSy  = array.new_line()
+var array<label> sessLblLdn   = array.new_label()
+var array<label> sessLblNy    = array.new_label()
+var array<label> sessLblTk    = array.new_label()
+var array<label> sessLblSy    = array.new_label()
+
+f_lineStyle(string st) =>
+    st == "Solid" ? line.style_solid : st == "Dotted" ? line.style_dotted : line.style_dashed
+
+bool sessTfOk = timeframe.isintraday and timeframe.in_seconds() <= sessMaxTf * 60
+
+f_session(bool show, string sess, string tz, color c, string name, array<line> lines, array<label> lbls) =>
+    bool inS = not na(time(timeframe.period, sess, tz))
+    if show and sessTfOk
+        if inS and not inS[1]
+            lines.push(line.new(bar_index, high, bar_index, low, extend=extend.both, color=color.new(c, 25), style=f_lineStyle(openSty), width=sessW))
+            if sessLbl
+                lbls.push(label.new(bar_index, high, name, yloc=yloc.abovebar, style=label.style_none, textcolor=c, size=size.tiny))
+        if showClose and not inS and inS[1]
+            lines.push(line.new(bar_index, high, bar_index, low, extend=extend.both, color=color.new(c, 45), style=f_lineStyle(closeSty), width=sessW))
+        while lines.size() > sessKeep * 2
+            line.delete(lines.shift())
+        while lbls.size() > sessKeep
+            label.delete(lbls.shift())
+
+// next occurrence (after now) of HH:MM local time in tz, skipping weekends
+f_nextTime(string tz, int hh, int mm) =>
+    int y = year(timenow, tz)
+    int mo = month(timenow, tz)
+    int d = dayofmonth(timenow, tz)
+    int base = timestamp(tz, y, mo, d, hh, mm)
+    int result = na
+    for k = 0 to 7
+        int t = base + k * 86400000
+        int dw = dayofweek(t, tz)
+        if t > timenow and dw != dayofweek.saturday and dw != dayofweek.sunday
+            result := t
+            break
+    result
+
+var array<line>  nextLines = array.new_line()
+var array<label> nextLbls  = array.new_label()
+
+f_next(bool show, string sess, string tz, color c, string name) =>
+    if show
+        int oh = int(str.tonumber(str.substring(sess, 0, 2)))
+        int om = int(str.tonumber(str.substring(sess, 2, 4)))
+        int tOpen = f_nextTime(tz, oh, om)
+        if not na(tOpen)
+            nextLines.push(line.new(tOpen, high, tOpen, low, xloc=xloc.bar_time, extend=extend.both, color=color.new(c, 25), style=f_lineStyle(openSty), width=sessW))
+            if sessLbl
+                nextLbls.push(label.new(tOpen, high, name + " (next)", xloc=xloc.bar_time, style=label.style_none, textcolor=c, size=size.tiny))
+        if showClose
+            int ch = int(str.tonumber(str.substring(sess, 5, 7)))
+            int cm = int(str.tonumber(str.substring(sess, 7, 9)))
+            int tClose = f_nextTime(tz, ch, cm)
+            if not na(tClose)
+                nextLines.push(line.new(tClose, high, tClose, low, xloc=xloc.bar_time, extend=extend.both, color=color.new(c, 45), style=f_lineStyle(closeSty), width=sessW))
+
+f_session(showLdn, sessLdn, "Europe/London",    colLdn, "London",   sessLinesLdn, sessLblLdn)
+f_session(showNy,  sessNy,  "America/New_York", colNy,  "New York", sessLinesNy,  sessLblNy)
+f_session(showTk,  sessTk,  "Asia/Tokyo",       colTk,  "Tokyo",    sessLinesTk,  sessLblTk)
+f_session(showSy,  sessSy,  "Australia/Sydney", colSy,  "Sydney",   sessLinesSy,  sessLblSy)
+
+if barstate.islast and showNext and sessTfOk
+    for l in nextLines
+        line.delete(l)
+    for lb in nextLbls
+        label.delete(lb)
+    nextLines.clear()
+    nextLbls.clear()
+    f_next(showLdn, sessLdn, "Europe/London",    colLdn, "London")
+    f_next(showNy,  sessNy,  "America/New_York", colNy,  "New York")
+    f_next(showTk,  sessTk,  "Asia/Tokyo",       colTk,  "Tokyo")
+    f_next(showSy,  sessSy,  "Australia/Sydney", colSy,  "Sydney")
+
+// ── Daily volume profile: one fixed-range profile per daily candle ──
+// Each daily candle gets its own profile (like dropping TradingView's Fixed Range Volume Profile on
+// that single candle). Its POC, VAH and VAL are drawn over that day and joined day to day.
+// Today has no complete profile yet, so yesterday's levels are extended until today's candle closes.
+G9 = "Daily volume profile (one profile per day)"
+showDvp  = input.bool(true, "Show daily POC / VAH / VAL", group=G9)
+dvpPocOn = input.bool(true, "POC line", inline="dv", group=G9)
+dvpVaOn  = input.bool(true, "VAH / VAL lines", inline="dv", group=G9)
+dvpRows  = input.int(24, "Number of rows", minval=5, maxval=200, group=G9)
+dvpVA    = input.float(70, "Value area (%)", minval=10, maxval=95, group=G9)
+dvpDays  = input.int(75, "Number of past days (one profile per daily candle)", minval=1, maxval=200, step=1, group=G9, tooltip="For example 50, 75 or 100: a separate fixed-range profile is built on each of that many past daily candles and their POC / VAH / VAL are joined. Each day uses the finest intrabar data TradingView still has for it (1 min for recent days, then 5, 15, 30 or 60 min for older days), so the oldest days are close approximations.")
+colDPoc  = input.color(#f23645, "POC", inline="dc", group=G9)
+colDVa   = input.color(#2962ff, "VAH / VAL", inline="dc", group=G9)
+dvpSty   = input.string("Solid", "Line style", options=["Solid", "Dashed", "Dotted"], group=G9)
+dvpW     = input.int(1, "Line width", minval=1, maxval=4, group=G9)
+dvpLbl   = input.bool(true, "Labels at the right edge", group=G9)
+
+// Intrabar data, finest first. TradingView keeps only a limited number of intrabars per request,
+// so 1-minute data covers just the last few days; older days fall back to 5, 15, 30 and 60 minutes.
+f_ltf(string tf) => timeframe.in_seconds() <= timeframe.in_seconds(tf) ? timeframe.period : tf
+[h1m, l1m, v1m]   = request.security_lower_tf(syminfo.tickerid, f_ltf("1"),  [high, low, volume], ignore_invalid_timeframe=true)
+[h5m, l5m, v5m]   = request.security_lower_tf(syminfo.tickerid, f_ltf("5"),  [high, low, volume], ignore_invalid_timeframe=true)
+[h15m, l15m, v15m] = request.security_lower_tf(syminfo.tickerid, f_ltf("15"), [high, low, volume], ignore_invalid_timeframe=true)
+[h30m, l30m, v30m] = request.security_lower_tf(syminfo.tickerid, f_ltf("30"), [high, low, volume], ignore_invalid_timeframe=true)
+[h60m, l60m, v60m] = request.security_lower_tf(syminfo.tickerid, f_ltf("60"), [high, low, volume], ignore_invalid_timeframe=true)
+// a finer series counts as complete when it has (almost) as many bars as the coarser one implies
+f_full(int nFine, int nCoarse, string tfFine, string tfCoarse, bool coarseOk) =>
+    float ratio = timeframe.in_seconds(f_ltf(tfCoarse)) / math.max(1, timeframe.in_seconds(f_ltf(tfFine)))
+    coarseOk and nFine > 0 and nFine >= nCoarse * ratio * 0.8
+
+f_profile(array<float> hs, array<float> ls, array<float> vs, int rows, float vaPct) =>
+    float poc = na
+    float vah = na
+    float val = na
+    if hs.size() > 0
+        float hi = hs.max()
+        float lo = ls.min()
+        if hi > lo
+            float step = (hi - lo) / rows
+            array<float> vols = array.new_float(rows, 0.0)
+            float total = 0.0
+            for i = 0 to hs.size() - 1
+                float v = nz(vs.get(i))
+                int b0 = math.max(0, math.min(rows - 1, int(math.floor((ls.get(i) - lo) / step))))
+                int b1 = math.max(0, math.min(rows - 1, int(math.floor((hs.get(i) - lo) / step))))
+                float rng = hs.get(i) - ls.get(i)
+                for b = b0 to b1
+                    vols.set(b, vols.get(b) + (rng > 0 ? v * math.max(0.0, math.min(hs.get(i), lo + (b + 1) * step) - math.max(ls.get(i), lo + b * step)) / rng : v))
+                total += v
+            if total > 0
+                int pIdx = vols.indexof(vols.max())
+                float acc = vols.get(pIdx)
+                int up = pIdx
+                int dn = pIdx
+                while acc + math.max(up < rows - 1 ? vols.get(up + 1) : 0.0, dn > 0 ? vols.get(dn - 1) : 0.0) <= total * vaPct / 100 and (up < rows - 1 or dn > 0)
+                    float vu = up < rows - 1 ? vols.get(up + 1) : -1.0
+                    float vd = dn > 0 ? vols.get(dn - 1) : -1.0
+                    if vu >= vd
+                        up += 1
+                        acc += vu
+                    else
+                        dn -= 1
+                        acc += vd
+                poc := lo + (pIdx + 0.5) * step
+                vah := lo + (up + 1) * step
+                val := lo + dn * step
+    [poc, vah, val]
+
+var array<float> dayH = array.new_float()
+var array<float> dayL = array.new_float()
+var array<float> dayV = array.new_float()
+var int dayStartT = na
+var int dayEndT = na
+var array<int>   dvS = array.new_int()
+var array<int>   dvE = array.new_int()
+var array<float> dvP = array.new_float()
+var array<float> dvH = array.new_float()
+var array<float> dvL = array.new_float()
+
+bool dvpNewDay = timeframe.change("D")
+if dvpNewDay and not na(dayStartT)
+    if dayH.size() > 0
+        [p, h, l] = f_profile(dayH, dayL, dayV, dvpRows, dvpVA)
+        if not na(p)
+            dvS.push(dayStartT)
+            dvE.push(dayEndT)
+            dvP.push(p)
+            dvH.push(h)
+            dvL.push(l)
+            if dvS.size() > dvpDays + 5
+                dvS.shift()
+                dvE.shift()
+                dvP.shift()
+                dvH.shift()
+                dvL.shift()
+    dayH.clear()
+    dayL.clear()
+    dayV.clear()
+if dvpNewDay or na(dayStartT)
+    dayStartT := time
+dayEndT := time_close
+if showDvp and time >= timenow - (dvpDays + 7) * 86400000
+    // pick the finest data that fully covers this bar (the oldest bar of a fine series may be partial)
+    int tier = h60m.size() > 0 ? 60 : 0
+    if f_full(h30m.size(), h60m.size(), "30", "60", tier == 60)
+        tier := 30
+    if f_full(h15m.size(), h30m.size(), "15", "30", tier == 30)
+        tier := 15
+    if f_full(h5m.size(), h15m.size(), "5", "15", tier == 15)
+        tier := 5
+    if f_full(h1m.size(), h5m.size(), "1", "5", tier == 5)
+        tier := 1
+    if tier == 0 and h30m.size() > 0
+        tier := 30
+    if tier == 1
+        dayH.concat(h1m)
+        dayL.concat(l1m)
+        dayV.concat(v1m)
+    else if tier == 5
+        dayH.concat(h5m)
+        dayL.concat(l5m)
+        dayV.concat(v5m)
+    else if tier == 15
+        dayH.concat(h15m)
+        dayL.concat(l15m)
+        dayV.concat(v15m)
+    else if tier == 30
+        dayH.concat(h30m)
+        dayL.concat(l30m)
+        dayV.concat(v30m)
+    else if tier == 60
+        dayH.concat(h60m)
+        dayL.concat(l60m)
+        dayV.concat(v60m)
+
+var polyline plPoc = na
+var polyline plVah = na
+var polyline plVal = na
+var array<label> dvpLabels = array.new_label()
+
+f_dvpStyle(string st) =>
+    st == "Dashed" ? line.style_dashed : st == "Dotted" ? line.style_dotted : line.style_solid
+
+if barstate.islast
+    polyline.delete(plPoc)
+    polyline.delete(plVah)
+    polyline.delete(plVal)
+    for lb in dvpLabels
+        label.delete(lb)
+    dvpLabels.clear()
+    int n = dvS.size()
+    if showDvp and n > 0
+        array<chart.point> ptP = array.new<chart.point>()
+        array<chart.point> ptH = array.new<chart.point>()
+        array<chart.point> ptL = array.new<chart.point>()
+        for i = math.max(0, n - dvpDays) to n - 1
+            ptP.push(chart.point.from_time(dvS.get(i), dvP.get(i)))
+            ptP.push(chart.point.from_time(dvE.get(i), dvP.get(i)))
+            ptH.push(chart.point.from_time(dvS.get(i), dvH.get(i)))
+            ptH.push(chart.point.from_time(dvE.get(i), dvH.get(i)))
+            ptL.push(chart.point.from_time(dvS.get(i), dvL.get(i)))
+            ptL.push(chart.point.from_time(dvE.get(i), dvL.get(i)))
+        // today: extend yesterday's levels until now
+        float lp = dvP.get(n - 1)
+        float lh = dvH.get(n - 1)
+        float ll = dvL.get(n - 1)
+        if dayStartT > dvE.get(n - 1) or dayStartT > dvS.get(n - 1)
+            ptP.push(chart.point.from_time(dayStartT, lp))
+            ptP.push(chart.point.from_time(time_close, lp))
+            ptH.push(chart.point.from_time(dayStartT, lh))
+            ptH.push(chart.point.from_time(time_close, lh))
+            ptL.push(chart.point.from_time(dayStartT, ll))
+            ptL.push(chart.point.from_time(time_close, ll))
+        plPoc := dvpPocOn ? polyline.new(ptP, xloc=xloc.bar_time, line_color=colDPoc, line_style=f_dvpStyle(dvpSty), line_width=dvpW) : na
+        plVah := dvpVaOn ? polyline.new(ptH, xloc=xloc.bar_time, line_color=colDVa, line_style=f_dvpStyle(dvpSty), line_width=dvpW) : na
+        plVal := dvpVaOn ? polyline.new(ptL, xloc=xloc.bar_time, line_color=colDVa, line_style=f_dvpStyle(dvpSty), line_width=dvpW) : na
+        if dvpLbl
+            if dvpPocOn
+                dvpLabels.push(label.new(bar_index + 2, lp, "POC " + str.tostring(lp, format.mintick), style=label.style_label_left, color=NONE, textcolor=colDPoc, size=size.tiny))
+            if dvpVaOn
+                dvpLabels.push(label.new(bar_index + 2, lh, "VAH " + str.tostring(lh, format.mintick), style=label.style_label_left, color=NONE, textcolor=colDVa, size=size.tiny))
+            if dvpVaOn
+                dvpLabels.push(label.new(bar_index + 2, ll, "VAL " + str.tostring(ll, format.mintick), style=label.style_label_left, color=NONE, textcolor=colDVa, size=size.tiny))
