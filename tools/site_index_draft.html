@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI Trading Room</title>
+<meta name="description" content="Open trading research built with AI: free indicators and honest strategy backtests, including the ones that failed.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#14171c;--mute:#5b6472;--line:#e3e6eb;--acc:#0b7a5a;--fail:#b4232c;--weak:#a86200;--arch:#5b6472}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1116;--card:#161b22;--ink:#e8ebf0;--mute:#9aa4b2;--line:#262d37;--acc:#3ccf9a;--fail:#ff6b72;--weak:#f0a940;--arch:#9aa4b2}}
+:root[data-theme="dark"]{--bg:#0e1116;--card:#161b22;--ink:#e8ebf0;--mute:#9aa4b2;--line:#262d37;--acc:#3ccf9a;--fail:#ff6b72;--weak:#f0a940;--arch:#9aa4b2}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 Inter,system-ui,sans-serif}
+.wrap{max-width:1040px;margin:0 auto;padding:0 16px}
+header{padding:64px 0 32px;border-bottom:1px solid var(--line)}
+.brand{font:700 14px "Space Grotesk",sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--acc)}
+h1{font:700 clamp(32px,6vw,56px)/1.05 "Space Grotesk",sans-serif;margin:12px 0 16px;max-width:16ch}
+.lead{font-size:19px;color:var(--mute);max-width:60ch;margin:0}
+h2{font:700 26px "Space Grotesk",sans-serif;margin:48px 0 16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column}
+.card h3{font:700 18px/1.3 "Space Grotesk",sans-serif;margin:0}
+.top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.tag{font-size:12px;font-weight:600;padding:2px 10px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.fail{color:var(--fail)}.weak{color:var(--weak)}.arch{color:var(--arch)}.ok{color:var(--acc)}
+.pl{color:var(--mute);font-size:13px;margin:6px 0 0}.card p{margin:10px 0 0}.found{font-size:15px}
+.card img{width:100%;border-radius:8px;margin-top:12px;border:1px solid var(--line)}
+.code{margin-top:auto;padding-top:14px;color:var(--acc);font-weight:600;text-decoration:none}
+.lessons{padding-left:20px}.lessons li{margin:8px 0}
+.disc{border-left:3px solid var(--weak);padding:12px 16px;background:var(--card);border-radius:0 8px 8px 0;color:var(--mute);font-size:14px;margin-top:24px}
+footer{margin:56px 0 0;padding:24px 0 48px;border-top:1px solid var(--line);color:var(--mute);font-size:14px}
+a{color:var(--acc)}
+</style></head><body>
+<header><div class="wrap"><div class="brand">AI Trading Room</div>
+<h1>Trading research, with the honest results.</h1>
+<p class="lead">Every idea here is coded, backtested on real broker data and published whatever the outcome — including the ones that failed. Free indicators, open code, no signals for sale.</p>
+<div class="disc">Research and education only, not financial advice. Backtests are not live results and past performance does not predict future returns. Leveraged trading can lose more than you deposit.</div>
+</div></header>
+<main class="wrap">
+<h2>Free indicators</h2>
+<div class="grid">
+<article class="card"><div class="top"><h3>SMC Minimal v2</h3><span class="tag ok">TradingView</span></div>
+<p>Strict BOS / CHoCH market structure (protected level = start of the leg that made the new extreme), London &amp; New York session lines with next-session projection, and a daily fixed-range volume profile: POC, VAH and VAL of each of the last 50–100 days, joined day to day.</p>
+<a class="code" href="https://github.com/Aitradingroom/ai-trading-room/tree/main/indicators/smc-minimal-v2">Get the code →</a></article>
+<article class="card"><div class="top"><h3>MAP Levels</h3><span class="tag ok">TradingView</span></div>
+<p>A price map of logarithmic round numbers (1–10, 20–100, 200–1000 …), halved again and again into mid-levels for lower timeframes.</p>
+<a class="code" href="https://github.com/Aitradingroom/ai-trading-room/tree/main/indicators/map-levels">Get the code →</a></article>
+</div>
+<h2>Strategy research log</h2>
+<div class="grid">
+<article class="card"><div class="top"><h3>IBS mean reversion (single index + index basket)</h3><span class="tag weak">Weak</span></div>
+<p class="pl">MT5 EA + Pine</p><p>Buy a stock index after a weak close: IBS = (close − low) / (high − low) below a threshold and the close below a pullback band (highest high of 10 days − 2.5 × average range of 25 days). Exit when the close is above the previous day&#x27;s high. The basket version runs the same rule on several indices with a cap on total exposure.</p><p class="found"><b>Finding:</b> The edge is real but small on CFD indices once spread and financing are paid. The first basket version had a −40% worst month because the indices fall together; a gross-exposure cap fixed the blow-up but also most of the return.</p>
+<a class="code" href="https://github.com/Aitradingroom/ai-trading-room/tree/main/strategies/ibs-mean-reversion">Code &amp; details →</a></article>
+<article class="card"><div class="top"><h3>Index system: turn-of-the-month + IBS</h3><span class="tag weak">Weak</span></div>
+<p class="pl">MT5 EA</p><p>Two documented stock-index effects in one basket: (A) long from the last trading day of the month into the first days of the new month (McConnell &amp; Xu 2008), (B) the IBS pullback rule above. Positions are sized by volatility targeting.</p><p class="found"><b>Finding:</b> Combining two weak edges smoothed the curve but did not make it worth trading after costs.</p>
+<a class="code" href="https://github.com/Aitradingroom/ai-trading-room/tree/main/strategies/index-system">Code &amp; details →</a></article>
+<article class="card"><div class="top"><h3>G10 currency basket: carry, momentum, value</h3><span class="tag fail">Failed</span></div>
+<p class="pl">MT5 EA</p><p>Every month rank the G10 currencies against USD on carry (policy rate), momentum and value, go long the best and short the worst.</p><p class="found"><b>Finding:</b> The result was dominated by broker swap. The MT5 tester applies today&#x27;s swap rates to all of history, so long backtests of carry strategies on CFDs are unreliable. A bad USDCHF tick on 15 Jan 2015 (SNB day) also has to be excluded.</p>
+<a class="code" href="https://github.com/Aitradingroom/ai-trading-room/tree/main/strategies/fx-g10-basket">Code &amp; details →</a></article>
+<article class="card"><div class="top"><h3>Diversified time-series momentum</h3><span class="tag fail">Failed</span></div>
+<p class="pl">MT5 EA</p><p>Monthly, for indices, metals, energy and FX: signal = average sign of the 1, 3 and 12-month return, position sized to a fixed volatility budget (Moskowitz, Ooi &amp; Pedersen 2012).</p><p class="found"><b>Finding:</b> Holding CFD positions for months means paying swap every night; on retail CFDs that cost ate the trend premium.</p>
+<a class="code" href="https://github.com/Aitradingroom/ai-trading-room/tree/main/strategies/trend-portfolio">Code &amp; details →</a></article>
+<article class="card"><div class="top"><h3>Turtle-style trend following with pyramiding</h3><span class="tag fail">Failed</span></div>
+<p class="pl">MT5 EA</p><p>Donchian breakout entries with an extra unit every k × ATR in profit, one shared trailing stop, optional SMA and swap filters.</p><p class="found"><b>Finding:</b> Steady losses in the 2016–2026 validation run (see image).</p><img src="img/Trend_Pyramid_validation_2016_2026.jpg" alt="Backtest equity curve: Turtle-style trend following with pyramiding" loading="lazy">
+<a class="code" href="https://github.com/Aitradingroom/ai-trading-room/tree/main/strategies/trend-pyramid">Code &amp; details →</a></article>
+<article class="card"><div class="top"><h3>Session VWAP: cross, band reversion, trend pullback</h3><span class="tag fail">Failed</span></div>
+<p class="pl">MT5 EA</p><p>Three intraday VWAP rules (flat at session end, so no swap) tested on indices, major FX pairs and gold.</p><p class="found"><b>Finding:</b> Some settings looked good in-sample but did not hold out-of-sample.</p>
+<a class="code" href="https://github.com/Aitradingroom/ai-trading-room/tree/main/strategies/vwap-intraday">Code &amp; details →</a></article>
+<article class="card"><div class="top"><h3>MAP Trend Rider</h3><span class="tag fail">Failed</span></div>
+<p class="pl">MT5 EA + Pine strategy</p><p>Trend following on the MAP level grid (logarithmic round numbers, halved recursively): enter on a close beyond a grid level in the SMA trend direction, stop one level back, trail level by level.</p><p class="found"><b>Finding:</b> Long-run test 2005–2026 lost money (see image).</p><img src="img/MAP_MT5_equity_2005_2026.jpg" alt="Backtest equity curve: MAP Trend Rider" loading="lazy">
+<a class="code" href="https://github.com/Aitradingroom/ai-trading-room/tree/main/strategies/map-trend-rider">Code &amp; details →</a></article>
+<article class="card"><div class="top"><h3>Opening range breakout (London / New York)</h3><span class="tag arch">Archived</span></div>
+<p class="pl">MT5 EA + Pine</p><p>Range = first N minutes after the session open; trade the first close outside it, stop at the other side, exit after X minutes.</p><p class="found"><b>Finding:</b> Results being re-run and documented.</p>
+<a class="code" href="https://github.com/Aitradingroom/ai-trading-room/tree/main/strategies/opening-range-breakout">Code &amp; details →</a></article>
+<article class="card"><div class="top"><h3>Quasimodo (over-and-under) pattern</h3><span class="tag arch">Archived</span></div>
+<p class="pl">MT5 EA</p><p>Swing H → L → HH, then a close below L: sell limit back at H, stop above HH, fixed reward-to-risk target (mirror for buys).</p><p class="found"><b>Finding:</b> Results being re-run and documented.</p>
+<a class="code" href="https://github.com/Aitradingroom/ai-trading-room/tree/main/strategies/quasimodo">Code &amp; details →</a></article>
+<article class="card"><div class="top"><h3>Asian session mean reversion</h3><span class="tag arch">Archived</span></div>
+<p class="pl">MT5 EA</p><p>M15, during the Asian session: fade closes outside the Bollinger band with RSI confirmation, exit at the middle band, ATR stop.</p><p class="found"><b>Finding:</b> Results being re-run and documented.</p>
+<a class="code" href="https://github.com/Aitradingroom/ai-trading-room/tree/main/strategies/asian-mean-reversion">Code &amp; details →</a></article>
+<article class="card"><div class="top"><h3>&quot;Shadow&quot; grid robot re-creation</h3><span class="tag fail">Failed — dangerous</span></div>
+<p class="pl">MT5 EA</p><p>OCO stop orders, then a grid against the position without a stop loss, per-position trailing.</p><p class="found"><b>Finding:</b> The balance rises smoothly while equity hides growing open losses (see image). Grid / no-stop systems look great until they don&#x27;t.</p><img src="img/Shadow_realticks_no_target.jpg" alt="Backtest equity curve: &quot;Shadow&quot; grid robot re-creation" loading="lazy">
+<a class="code" href="https://github.com/Aitradingroom/ai-trading-room/tree/main/strategies/shadow-grid">Code &amp; details →</a></article>
+</div>
+<h2>Lessons so far</h2>
+<ol class="lessons">
+<li><b>Costs decide everything.</b> Spread, commission and overnight swap turned several published edges into losers on retail CFDs.</li>
+<li><b>The MT5 tester applies today's swap to all of history,</b> so long-hold and carry backtests on CFDs need care.</li>
+<li><b>In-sample is not enough.</b> Wherever possible a result is re-checked on a later, unseen period.</li>
+<li><b>A smooth balance is not safety.</b> Grid systems without a stop show a rising balance while equity sinks.</li>
+</ol>
+</main>
+<footer><div class="wrap">AI Trading Room · research by Mohsen, coded and tested with Claude · code under the MIT License · <a href="https://github.com/Aitradingroom/ai-trading-room">GitHub</a></div></footer>
+</body></html>

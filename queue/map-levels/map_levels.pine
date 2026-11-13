@@ -1,0 +1,136 @@
+//@version=6
+indicator("MAP Levels", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// ── Inputs ──
+G1 = "Levels"
+depthMode  = input.string("Auto", "Depth mode", options=["Auto", "Manual"], group=G1, tooltip="Auto: finer levels on lower timeframes (based on ATR of the chart timeframe). Manual: fixed depth.")
+manualDep  = input.int(4, "Manual depth (0 = A only, 1 = +B, 2 = +C ...)", minval=0, maxval=15, group=G1)
+autoAtr    = input.float(1.5, "Auto: finest level spacing ≥ x ATR(14)", minval=0.1, step=0.1, group=G1)
+nEach      = input.int(12, "Finest levels shown above / below price", minval=2, maxval=60, group=G1)
+
+G2 = "Display"
+showLabels = input.bool(true, "Show labels", group=G2)
+lblSize    = input.string("Tiny", "Label size", options=["Tiny", "Small", "Normal"], group=G2)
+showTable  = input.bool(true, "Show info table", group=G2)
+colorMode  = input.string("Relative", "Color mode", options=["Relative", "By letter"], group=G2, tooltip="Relative: the coarsest levels visible on this timeframe get the strongest colors. By letter: fixed color per tier letter.")
+
+G3 = "Tiers"
+showA = input.bool(true, "A  main (1, 2 … 10, 20 … 100, 200 …)", inline="a", group=G3)
+colA  = input.color(#f5c542, "", inline="a", group=G3)
+showB = input.bool(true, "B  1/2", inline="b", group=G3)
+colB  = input.color(#42a5f5, "", inline="b", group=G3)
+showC = input.bool(true, "C  1/4", inline="c", group=G3)
+colC  = input.color(#ab47bc, "", inline="c", group=G3)
+showD = input.bool(true, "D  1/8", inline="d", group=G3)
+colD  = input.color(#26a69a, "", inline="d", group=G3)
+showE = input.bool(true, "E…P  1/16 and finer (finest)", inline="e", group=G3)
+colE  = input.color(#9598a1, "", inline="e", group=G3)
+
+// ── Helpers ──
+string LETTERS = "ABCDEFGHIJKLMNOP"
+
+f_letter(int t) =>
+    str.substring(LETTERS, t, t + 1)
+
+f_show(int t) =>
+    t == 0 ? showA : t == 1 ? showB : t == 2 ? showC : t == 3 ? showD : showE
+
+// visual rank: 0 = strongest. Relative mode ranks by distance from the finest tier.
+f_rank(int t, int depth) =>
+    t == 0 ? 0 : colorMode == "By letter" ? t : math.max(1, 4 - (depth - t))
+
+f_color(int t, int depth) =>
+    int r = f_rank(t, depth)
+    color base = r == 0 ? colA : r == 1 ? colB : r == 2 ? colC : r == 3 ? colD : colE
+    color.new(base, r <= 4 ? 0 : math.min(25 + (r - 5) * 12, 70))
+
+f_style(int t, int depth) =>
+    int r = f_rank(t, depth)
+    r <= 1 ? line.style_solid : r == 2 ? line.style_dashed : line.style_dotted
+
+f_lsize() =>
+    lblSize == "Small" ? size.small : lblSize == "Normal" ? size.normal : size.tiny
+
+f_fmt(float v) =>
+    str.tostring(v, "#.##########")
+
+// ── Drawing storage ──
+var array<line>  lns = array.new_line()
+var array<label> lbs = array.new_label()
+var table info = table.new(position.bottom_right, 2, 3, bgcolor=color.new(#131722, 10), border_width=0)
+
+f_clear() =>
+    for l in lns
+        line.delete(l)
+    for b in lbs
+        label.delete(b)
+    lns.clear()
+    lbs.clear()
+
+f_draw(float v, int t, int depth) =>
+    if f_show(f_rank(t, depth)) and lns.size() < 480
+        color c = f_color(t, depth)
+        lns.push(line.new(bar_index - 1, v, bar_index, v, extend=extend.both, color=c, width=t == 0 ? 2 : 1, style=f_style(t, depth)))
+        if showLabels
+            lbs.push(label.new(bar_index + 3, v, f_letter(t) + "  " + f_fmt(v), style=label.style_label_left, color=color.new(color.black, 100), textcolor=c, size=f_lsize()))
+
+// ── Build levels on the last bar ──
+float atr = ta.atr(14)
+
+if barstate.islast and close > 0
+    f_clear()
+    float p = close
+    int k = int(math.floor(math.log10(p)))
+
+    // main (A) levels: d x 10^e around the price
+    array<float> maj = array.new_float()
+    for e = k - 2 to k + 2
+        float pw = math.pow(10, e)
+        for d = 1 to 9
+            maj.push(d * pw)
+    maj.push(math.pow(10, k + 3))
+
+    int idx = 0
+    for i = 0 to maj.size() - 2
+        if maj.get(i) <= p and p < maj.get(i + 1)
+            idx := i
+
+    float lo = maj.get(idx)
+    float hi = maj.get(idx + 1)
+    float step = hi - lo
+
+    // depth: Auto keeps the finest spacing close to x * ATR of this timeframe
+    int depth = manualDep
+    if depthMode == "Auto"
+        depth := na(atr) or atr <= 0 ? 3 : int(math.floor(math.log(step / (autoAtr * atr)) / math.log(2)))
+        depth := math.max(0, math.min(15, depth))
+    float fine = step / math.pow(2, depth)
+    float W = nEach * fine
+
+    // draw every tier, only inside [p - W, p + W]
+    for c = math.max(0, idx - 2) to math.min(maj.size() - 2, idx + 2)
+        float a = maj.get(c)
+        float b = maj.get(c + 1)
+        float seg = b - a
+        if c == math.max(0, idx - 2) and math.abs(a - p) <= W
+            f_draw(a, 0, depth)
+        if math.abs(b - p) <= W
+            f_draw(b, 0, depth)
+        if depth >= 1 and a <= p + W and b >= p - W
+            for t = 1 to depth
+                float n = math.pow(2, t)
+                int jlo = math.max(1, int(math.ceil((p - W - a) / seg * n)))
+                int jhi = math.min(int(n) - 1, int(math.floor((p + W - a) / seg * n)))
+                if jlo % 2 == 0
+                    jlo += 1
+                if jlo <= jhi
+                    for j = jlo to jhi by 2
+                        f_draw(a + seg * j / n, t, depth)
+
+    if showTable
+        table.cell(info, 0, 0, "A cell", text_color=color.gray, text_size=size.small)
+        table.cell(info, 1, 0, f_fmt(lo) + "  →  " + f_fmt(hi), text_color=colA, text_size=size.small)
+        table.cell(info, 0, 1, "B mid", text_color=color.gray, text_size=size.small)
+        table.cell(info, 1, 1, f_fmt(lo + step / 2), text_color=colB, text_size=size.small)
+        table.cell(info, 0, 2, "Finest", text_color=color.gray, text_size=size.small)
+        table.cell(info, 1, 2, f_letter(depth) + "  (step " + f_fmt(fine) + ")", text_color=colE, text_size=size.small)

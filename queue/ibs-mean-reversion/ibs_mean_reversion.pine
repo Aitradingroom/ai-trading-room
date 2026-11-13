@@ -1,0 +1,28 @@
+//@version=6
+strategy("IBS Mean Reversion", overlay=true, initial_capital=100000, default_qty_type=strategy.percent_of_equity, default_qty_value=100, commission_type=strategy.commission.percent, commission_value=0.01, slippage=0, process_orders_on_close=true)
+
+// IBS = (close - low) / (high - low): where the close sits inside the day's range (0 = at the low, 1 = at the high)
+// Entry (at the close): close below the pullback band AND IBS below the threshold
+//   pullback band = highest high of the last N days - k x average (high - low) of the last M days
+// Exit (at the close): close above yesterday's high
+lenH      = input.int(10, "Pullback: highest high length (days)")
+lenR      = input.int(25, "Pullback: average range length (days)")
+mult      = input.float(2.5, "Pullback: k x average range", step=0.1)
+useBand   = input.bool(true, "Require close below the pullback band")
+ibsTh     = input.float(0.3, "IBS threshold", step=0.05)
+startYear = input.int(1990, "Start year")
+endYear   = input.int(2100, "End year")
+
+float rng  = ta.sma(high - low, lenR)
+float band = ta.highest(high, lenH) - mult * rng
+float ibs  = high > low ? (close - low) / (high - low) : 0.5
+bool inWin = year >= startYear and year <= endYear
+
+bool longCond = inWin and (not useBand or close < band) and ibs < ibsTh
+if longCond and strategy.position_size == 0
+    strategy.entry("L", strategy.long)
+if strategy.position_size > 0 and (close > high[1] or not inWin)
+    strategy.close("L")
+
+plot(band, "Pullback band", color=color.new(#ab47bc, 0))
+plot(ta.highest(high, lenH), "10-day high", color=color.new(#ef5350, 40))
