@@ -10,9 +10,9 @@ New research is posted one topic at a time. Each post has its own folder with th
 | # | Topic | Type | Platform |
 |---|---|---|---|
 | 1 | [SMC Minimal v2: strict market structure, session lines and daily volume profile](indicators/smc-minimal-v2/) | Free indicator | TradingView |
+| 2 | [The "Shadow" grid robot: why a smooth balance curve can hide a disaster](strategies/shadow-grid/) | Strategy research (failed) | MT5 |
 
 ## Coming next
-- The "Shadow" grid robot: why a smooth balance curve can hide a disaster
 - Session VWAP: three popular rules on indices, forex and gold
 - IBS mean reversion on stock indices
 - G10 currency carry, momentum and value
