@@ -11,9 +11,9 @@ New research is posted one topic at a time. Each post has its own folder with th
 |---|---|---|---|
 | 1 | [SMC Minimal v2: strict market structure, session lines and daily volume profile](indicators/smc-minimal-v2/) | Free indicator | TradingView |
 | 2 | [The "Shadow" grid robot: why a smooth balance curve can hide a disaster](strategies/shadow-grid/) | Strategy research (failed) | MT5 |
+| 3 | [Session VWAP: 3 popular rules tested on indices, forex and gold](strategies/vwap-intraday/) | Strategy research (failed) | MT5 |
 
 ## Coming next
-- Session VWAP: three popular rules on indices, forex and gold
 - IBS mean reversion on stock indices
 - G10 currency carry, momentum and value
 - Turtle-style trend following with pyramiding
