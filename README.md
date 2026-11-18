@@ -14,6 +14,7 @@ New research is posted one topic at a time. Each post has its own folder with th
 | 3 | [Session VWAP: 3 popular rules tested on indices, forex and gold](strategies/vwap-intraday/) | Strategy research (failed) | MT5 |
 | 4 | [IBS mean reversion on stock indices: a real edge, almost eaten by costs](strategies/ibs-mean-reversion/) | Strategy research (weak) | MT5 + TradingView |
 | 5 | [G10 carry, momentum and value — and the swap trap in MT5 backtests](strategies/fx-g10-basket/) | Strategy research (failed) | MT5 |
+| 6 | [Time-series momentum on retail CFDs: overnight swap eats the trend](strategies/trend-portfolio/) | Strategy research (failed) | MT5 |
 
 ## Coming next
 - Turtle-style trend following with pyramiding
