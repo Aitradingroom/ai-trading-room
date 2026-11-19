@@ -15,9 +15,10 @@ New research is posted one topic at a time. Each post has its own folder with th
 | 4 | [IBS mean reversion on stock indices: a real edge, almost eaten by costs](strategies/ibs-mean-reversion/) | Strategy research (weak) | MT5 + TradingView |
 | 5 | [G10 carry, momentum and value — and the swap trap in MT5 backtests](strategies/fx-g10-basket/) | Strategy research (failed) | MT5 |
 | 6 | [Time-series momentum on retail CFDs: overnight swap eats the trend](strategies/trend-portfolio/) | Strategy research (failed) | MT5 |
+| 7 | [Turtle-style pyramiding 2016–2026: adding to winners didn't save the trend](strategies/trend-pyramid/) | Strategy research (failed) | MT5 |
 
 ## Coming next
-- Turtle-style trend following with pyramiding
+- MAP Levels: free round-number levels indicator
 - …and more from our research log
 
 ## About
