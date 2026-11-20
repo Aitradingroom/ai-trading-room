@@ -1,0 +1,224 @@
+//@version=6
+// AITR — Forex Range Breakout  |  Version 1: Direct range breakout
+// Research / backtest tool only. Not financial advice.
+//
+// RULES (unambiguous):
+//  Range      : last N CLOSED candles before the signal bar (default 12): rH = highest high, rL = lowest low.
+//  Compression: (rH - rL) < compMult x ATR(14) of the previous closed bar (default 1.5).
+//  BUY        : compression valid AND signal bar CLOSES above rH  -> market order, fills at NEXT bar open.
+//  SELL       : compression valid AND signal bar CLOSES below rL  -> market order, fills at NEXT bar open.
+//  Stop       : slAtr x ATR(14) measured at the signal close (default 1.5), placed from the ACTUAL fill price
+//               (strategy.exit loss/profit in ticks are relative to the real entry fill).
+//  Target     : rr x stop distance (default 3R), also from the actual fill.
+//  Time exit  : position closed at the open of the bar after N bars in the trade (default 12).
+//  One open position at a time; optional max trades per day.
+//  Sizing     : riskPct % of current equity / (stop distance x point value x quote->account FX rate), rounded down to lot step.
+//  Costs      : slippage (ticks, applied to market & stop fills) + commission per unit — edit in Properties tab.
+//  All filters are OFF by default = base version.
+
+strategy("AITR Range Breakout v1 — Direct", shorttitle = "AITR RB v1", overlay = true,
+     initial_capital = 10000, currency = currency.USD, pyramiding = 0,
+     default_qty_type = strategy.fixed, default_qty_value = 1000,
+     commission_type = strategy.commission.cash_per_contract, commission_value = 0.000035,
+     slippage = 5, margin_long = 2, margin_short = 2,
+     process_orders_on_close = false, calc_on_every_tick = false, max_bars_back = 1000)
+
+// ───────── Inputs ─────────
+grpR = "1) Range"
+rangeLen = input.int(12, "Range candles (closed, before signal)", minval = 3, group = grpR)
+atrLen   = input.int(14, "ATR length", minval = 1, group = grpR)
+compMult = input.float(1.5, "Compression: range width < x ATR", minval = 0.1, step = 0.1, group = grpR)
+
+grpX = "2) Risk & exits"
+slAtr    = input.float(1.5, "Stop = x ATR", minval = 0.1, step = 0.1, group = grpX)
+rr       = input.float(3.0, "Target = x stop (R)", minval = 0.5, step = 0.5, group = grpX)
+maxBars  = input.int(12, "Time exit after N bars (0 = off)", minval = 0, group = grpX)
+riskPct  = input.float(0.5, "Risk per trade (% equity)", minval = 0.01, step = 0.05, group = grpX)
+lotStep  = input.float(1000, "Lot step (units; 1000 = micro lot)", minval = 1, group = grpX)
+maxDay   = input.int(0, "Max trades per day (0 = unlimited)", minval = 0, group = grpX)
+pipIn    = input.float(0.0, "Pip size (0 = auto: mintick x 10)", minval = 0, group = grpX)
+
+grpF = "3) Optional filters (all OFF = base version)"
+useEma  = input.bool(false, "EMA trend filter", group = grpF, inline = "e")
+emaLen  = input.int(200, "len", minval = 1, group = grpF, inline = "e")
+useAdx  = input.bool(false, "ADX filter", group = grpF, inline = "a")
+adxMode = input.string("Above", "", options = ["Above", "Below"], group = grpF, inline = "a")
+adxLvl  = input.float(20, "level", group = grpF, inline = "a")
+adxLen  = input.int(14, "ADX length", minval = 1, group = grpF)
+useSess = input.bool(false, "Session filter (London OR New York)", group = grpF)
+sessLon = input.session("0800-1700", "London session (London time)", group = grpF)
+sessNy  = input.session("0800-1700", "New York session (NY time)", group = grpF)
+useAtrF = input.bool(false, "ATR min/max filter (pips)", group = grpF, inline = "t")
+atrMinP = input.float(0, "min", group = grpF, inline = "t")
+atrMaxP = input.float(1000, "max", group = grpF, inline = "t")
+useBrk  = input.bool(false, "Min breakout distance (x ATR beyond range)", group = grpF, inline = "b")
+brkAtr  = input.float(0.1, "", step = 0.05, group = grpF, inline = "b")
+useH4   = input.bool(false, "H4 trend filter (H4 close vs H4 EMA, confirmed bars)", group = grpF, inline = "h")
+h4Len   = input.int(50, "EMA", minval = 1, group = grpF, inline = "h")
+
+grpD = "4) Test window (use for in-sample / out-of-sample split)"
+startT = input.time(timestamp("2015-01-01T00:00:00"), "Start", group = grpD)
+endT   = input.time(timestamp("2099-01-01T00:00:00"), "End", group = grpD)
+showTbl = input.bool(true, "Show stats tables", group = grpD)
+
+// ───────── Core calculations (closed bars only) ─────────
+pip     = pipIn > 0 ? pipIn : syminfo.mintick * 10
+atr     = ta.atr(atrLen)
+rH      = ta.highest(high, rangeLen)[1]
+rL      = ta.lowest(low, rangeLen)[1]
+rW      = rH - rL
+isComp  = rW < compMult * atr[1]
+
+// ───────── Filters ─────────
+ema = ta.ema(close, emaLen)
+[diP, diM, adx] = ta.dmi(adxLen, adxLen)
+// H4: previous CONFIRMED H4 bar only (no lookahead / no repaint)
+h4Bull = request.security(syminfo.tickerid, "240", close[1] > ta.ema(close, h4Len)[1], lookahead = barmerge.lookahead_on)
+h4Bear = request.security(syminfo.tickerid, "240", close[1] < ta.ema(close, h4Len)[1], lookahead = barmerge.lookahead_on)
+
+inLon  = not na(time(timeframe.period, sessLon, "Europe/London"))
+inNy   = not na(time(timeframe.period, sessNy, "America/New_York"))
+sessOk = not useSess or inLon or inNy
+adxOk  = not useAdx or (adxMode == "Above" ? adx > adxLvl : adx < adxLvl)
+atrOk  = not useAtrF or (atr / pip >= atrMinP and atr / pip <= atrMaxP)
+brkMin = useBrk ? brkAtr * atr : 0.0
+inWin  = time >= startT and time <= endT
+
+// ───────── Daily trade counter ─────────
+var int dayCount = 0
+if timeframe.change("1D")
+    dayCount := 0
+dayOk = maxDay == 0 or dayCount < maxDay
+
+// ───────── Stats (processed BEFORE new entries) ─────────
+var float lastRisk = na
+var int   nClosed  = 0
+var int   nWin     = 0
+var int   nLong    = 0
+var int   nShort   = 0
+var float sumR     = 0.0
+var float sumWinR  = 0.0
+var float sumLossR = 0.0
+var int   curStreak = 0
+var int   maxStreak = 0
+var map<int, float> mR = map.new<int, float>()
+var map<int, float> yR = map.new<int, float>()
+var map<int, int>   yN = map.new<int, int>()
+var array<int> yrs = array.new<int>()
+
+if strategy.closedtrades > nClosed
+    for i = nClosed to strategy.closedtrades - 1
+        float p = strategy.closedtrades.profit(i)
+        float r = na(lastRisk) or lastRisk == 0 ? 0.0 : p / lastRisk
+        sumR += r
+        if p > 0
+            nWin += 1
+            sumWinR += r
+            curStreak := 0
+        else
+            sumLossR += r
+            curStreak += 1
+            maxStreak := math.max(maxStreak, curStreak)
+        if strategy.closedtrades.size(i) > 0
+            nLong += 1
+        else
+            nShort += 1
+        int xt = strategy.closedtrades.exit_time(i)
+        int y  = year(xt)
+        int k  = y * 100 + month(xt)
+        mR.put(k, (mR.contains(k) ? mR.get(k) : 0.0) + r)
+        yR.put(y, (yR.contains(y) ? yR.get(y) : 0.0) + r)
+        yN.put(y, (yN.contains(y) ? yN.get(y) : 0) + 1)
+        if not yrs.includes(y)
+            yrs.push(y)
+    nClosed := strategy.closedtrades
+
+// ───────── Time exit ─────────
+if strategy.position_size != 0 and maxBars > 0
+    int eb = strategy.opentrades.entry_bar_index(0)
+    // close order placed at this close fills at next open -> trade held exactly maxBars bars
+    if bar_index - eb >= maxBars - 1
+        strategy.close_all(comment = "Time")
+
+// ───────── Signals ─────────
+flat      = strategy.position_size == 0
+longSig   = isComp and close > rH and close - rH >= brkMin and (not useEma or close > ema) and (not useH4 or h4Bull)
+shortSig  = isComp and close < rL and rL - close >= brkMin and (not useEma or close < ema) and (not useH4 or h4Bear)
+canTrade  = flat and inWin and sessOk and adxOk and atrOk and dayOk
+
+stopDist  = slAtr * atr
+lossTicks = math.max(1, math.round(stopDist / syminfo.mintick))
+profTicks = math.max(1, math.round(lossTicks * rr))
+fx        = request.currency_rate(syminfo.currency, strategy.account_currency)
+riskCash  = strategy.equity * riskPct / 100
+unitRisk  = stopDist * syminfo.pointvalue * fx
+qty       = unitRisk > 0 ? math.floor(riskCash / unitRisk / lotStep) * lotStep : 0.0
+
+if canTrade and qty > 0 and (longSig or shortSig)
+    lastRisk := qty * lossTicks * syminfo.mintick * syminfo.pointvalue * fx
+    dayCount += 1
+    if longSig
+        strategy.entry("L", strategy.long, qty = qty, comment = "BUY")
+        strategy.exit("L-x", "L", loss = lossTicks, profit = profTicks, comment_loss = "SL", comment_profit = "TP")
+    else
+        strategy.entry("S", strategy.short, qty = qty, comment = "SELL")
+        strategy.exit("S-x", "S", loss = lossTicks, profit = profTicks, comment_loss = "SL", comment_profit = "TP")
+
+// ───────── Visuals ─────────
+plot(isComp ? rH : na, "Range high", color.new(color.teal, 0), 1, plot.style_linebr)
+plot(isComp ? rL : na, "Range low", color.new(color.red, 0), 1, plot.style_linebr)
+plot(useEma ? ema : na, "EMA", color.new(color.orange, 0))
+bgcolor(isComp ? color.new(color.blue, 92) : na, title = "Compression")
+
+// ───────── Tables ─────────
+var table sumT = table.new(position.top_right, 2, 9, bgcolor = color.new(color.black, 15), border_width = 1)
+var table monT = table.new(position.bottom_right, 14, 25, bgcolor = color.new(color.black, 15), border_width = 1)
+
+f_cell(tb, c, r, txt, col) =>
+    table.cell(tb, c, r, txt, text_color = col, text_size = size.tiny)
+
+if barstate.islast and showTbl
+    float n   = float(nClosed)
+    float wr  = n > 0 ? nWin / n * 100 : 0.0
+    float ex  = n > 0 ? sumR / n : 0.0
+    float aw  = nWin > 0 ? sumWinR / nWin : 0.0
+    int   nl  = nClosed - nWin
+    float al  = nl > 0 ? sumLossR / nl : 0.0
+    float pfR = sumLossR != 0 ? sumWinR / math.abs(sumLossR) : 0.0
+    f_cell(sumT, 0, 0, "AITR RB v1", color.yellow)
+    f_cell(sumT, 1, 0, syminfo.ticker + " " + timeframe.period, color.yellow)
+    f_cell(sumT, 0, 1, "Trades", color.white)
+    f_cell(sumT, 1, 1, str.tostring(nClosed), color.white)
+    f_cell(sumT, 0, 2, "Win rate", color.white)
+    f_cell(sumT, 1, 2, str.tostring(wr, "#.0") + "%", color.white)
+    f_cell(sumT, 0, 3, "Expectancy", color.white)
+    f_cell(sumT, 1, 3, str.tostring(ex, "#.000") + " R", ex > 0 ? color.lime : color.red)
+    f_cell(sumT, 0, 4, "Avg win / loss", color.white)
+    f_cell(sumT, 1, 4, str.tostring(aw, "#.00") + " / " + str.tostring(al, "#.00") + " R", color.white)
+    f_cell(sumT, 0, 5, "PF (R)", color.white)
+    f_cell(sumT, 1, 5, str.tostring(pfR, "#.00"), color.white)
+    f_cell(sumT, 0, 6, "Max loss streak", color.white)
+    f_cell(sumT, 1, 6, str.tostring(maxStreak), color.white)
+    f_cell(sumT, 0, 7, "Long / Short", color.white)
+    f_cell(sumT, 1, 7, str.tostring(nLong) + " / " + str.tostring(nShort), color.white)
+    f_cell(sumT, 0, 8, "Total R", color.white)
+    f_cell(sumT, 1, 8, str.tostring(sumR, "#.0"), sumR > 0 ? color.lime : color.red)
+
+    // monthly R grid: rows = years, cols = Jan..Dec + year total
+    f_cell(monT, 0, 0, "Year", color.yellow)
+    for m = 1 to 12
+        f_cell(monT, m, 0, str.tostring(m), color.yellow)
+    f_cell(monT, 13, 0, "Tot R (n)", color.yellow)
+    int rows = math.min(yrs.size(), 24)
+    for j = 0 to math.max(rows - 1, 0)
+        if rows == 0
+            break
+        int y = yrs.get(yrs.size() - rows + j)
+        f_cell(monT, 0, j + 1, str.tostring(y), color.white)
+        for m = 1 to 12
+            int k = y * 100 + m
+            if mR.contains(k)
+                float v = mR.get(k)
+                f_cell(monT, m, j + 1, str.tostring(v, "#.0"), v >= 0 ? color.lime : color.red)
+        float yt = yR.get(y)
+        f_cell(monT, 13, j + 1, str.tostring(yt, "#.0") + " (" + str.tostring(yN.get(y)) + ")", yt >= 0 ? color.lime : color.red)

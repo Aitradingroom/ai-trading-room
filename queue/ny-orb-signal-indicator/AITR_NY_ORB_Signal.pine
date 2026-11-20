@@ -1,0 +1,122 @@
+//@version=5
+// AI Trading Room — NY Open ORB Signal (indicator only, does NOT trade)
+// Same rules as ORB_NY_Final_EA / ORB_NY_Prop_EA (backtested 2021-2026 on US500 + NAS100):
+//  1) Opening range = first 15 min of the NY cash session (09:30-09:45 New York time)
+//  2) Skip the day if OR < 0.1 x ATR(14) daily
+//  3) Signal on a 5-min candle CLOSE outside the OR, only in the direction of EMA50 (15-min)
+//  4) Entry window: 90 min after the OR (until 11:15 NY). One signal per day.
+//  5) Stop = OR edge -/+ 0.2 x OR range. Target = 6R. Close everything at 15:55 NY if still open.
+//  6) Position size from account size and risk % (half risk in June & July)
+// USE ON A 5-MINUTE CHART (US500 / SPX CFD and NAS100 / NDX CFD).
+// Backtest only — not financial advice.
+indicator("AITR — NY ORB Signal", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=200)
+
+// ---------- inputs ----------
+acct      = input.float(200000, "Account size ($)")
+riskPct   = input.float(0.075, "Risk per trade (%)", step=0.005)
+weakHalf  = input.bool(true, "Half risk in June & July")
+pointVal  = input.float(1.0, "$ value of 1 point for 1 lot (check your broker)", step=0.1)
+rr        = input.float(6.0, "Target (R)")
+stopFrac  = input.float(0.2, "Stop beyond OR edge (x OR range)", step=0.05)
+orMinAtr  = input.float(0.1, "Min OR size (x daily ATR14)", step=0.01)
+emaLen    = input.int(50, "Trend EMA length (15-min)")
+winMin    = input.int(90, "Entry window after OR (minutes)")
+showLines = input.bool(true, "Draw entry / stop / target")
+
+tz = "America/New_York"
+
+// ---------- higher-timeframe data (last CLOSED bars, no repaint) ----------
+ema15 = request.security(syminfo.tickerid, "15", ta.ema(close, emaLen)[1], lookahead=barmerge.lookahead_on)
+atrD  = request.security(syminfo.tickerid, "D",  ta.atr(14)[1],          lookahead=barmerge.lookahead_on)
+
+// ---------- session logic ----------
+hNY = hour(time, tz)
+mNY = minute(time, tz)
+tNY = hNY * 60 + mNY   // bar OPEN time in NY minutes
+orStart = 9 * 60 + 30
+orEnd = 9 * 60 + 45
+lastEntry = orEnd + winMin
+flatT = 15 * 60 + 55
+newDay = dayofmonth(time, tz) != dayofmonth(time[1], tz)
+
+var float orH = na
+var float orL = na
+var bool traded = false
+var bool active = false
+var int dir = 0
+var float entry = na
+var float sl = na
+var float tp = na
+var box orBox = na
+
+if newDay
+    orH := na
+    orL := na
+    traded := false
+    active := false
+    dir := 0
+
+inOR = tNY >= orStart and tNY < orEnd
+if inOR
+    orH := na(orH) ? high : math.max(orH, high)
+    orL := na(orL) ? low  : math.min(orL, low)
+
+// draw the opening range box once it is complete
+if tNY == orEnd and not na(orH)
+    orBox := box.new(bar_index - 3, orH, bar_index + 20, orL, border_color=color.new(color.aqua, 0), bgcolor=color.new(color.aqua, 88))
+
+orReady   = not na(orH) and tNY >= orEnd
+rng       = orH - orL
+sizeOK    = orReady and rng >= orMinAtr * atrD
+barCloseT = tNY + timeframe.multiplier           // this 5-min bar closes at tNY+5
+inWindow  = barCloseT > orEnd and barCloseT <= lastEntry
+
+longSig  = sizeOK and inWindow and not traded and close > orH and close > ema15
+shortSig = sizeOK and inWindow and not traded and close < orL and close < ema15
+
+mon = month(time, tz)
+rp  = riskPct * ((weakHalf and (mon == 6 or mon == 7)) ? 0.5 : 1.0)
+riskUSD = acct * rp / 100.0
+
+if (longSig or shortSig) and barstate.isconfirmed
+    traded := true
+    active := true
+    dir   := longSig ? 1 : -1
+    entry := close
+    sl    := longSig ? orH - stopFrac * rng : orL + stopFrac * rng
+    sd     = math.abs(entry - sl)
+    tp    := entry + dir * rr * sd
+    lots   = sd > 0 ? riskUSD / (sd * pointVal) : na
+    txt = (dir == 1 ? "BUY " : "SELL ") + syminfo.ticker + "\nEntry " + str.tostring(entry, format.mintick) + "\nSL " + str.tostring(sl, format.mintick) + "\nTP " + str.tostring(tp, format.mintick) + " (" + str.tostring(rr) + "R)" + "\nRisk $" + str.tostring(riskUSD, "#") + " (" + str.tostring(rp, "#.###") + "%)" + "\nSize ≈ " + str.tostring(lots, "#.##") + " lots"
+    label.new(bar_index, dir == 1 ? low : high, txt, style=dir == 1 ? label.style_label_up : label.style_label_down, color=dir == 1 ? color.new(color.green, 0) : color.new(color.red, 0), textcolor=color.white, size=size.small)
+    if showLines
+        line.new(bar_index, entry, bar_index + 60, entry, color=color.white, style=line.style_dashed)
+        line.new(bar_index, sl,    bar_index + 60, sl,    color=color.red)
+        line.new(bar_index, tp,    bar_index + 60, tp,    color=color.green)
+    alert("AITR ORB: " + txt, alert.freq_once_per_bar_close)
+
+// track the open idea: stop / target / time exit
+if active and not ((longSig or shortSig) and barstate.isconfirmed)
+    hitSL = dir == 1 ? low <= sl : high >= sl
+    hitTP = dir == 1 ? high >= tp : low <= tp
+    if hitTP
+        active := false
+        alert("AITR ORB: TARGET reached on " + syminfo.ticker, alert.freq_once_per_bar_close)
+    else if hitSL
+        active := false
+        alert("AITR ORB: STOP hit on " + syminfo.ticker, alert.freq_once_per_bar_close)
+    else if barCloseT >= flatT
+        active := false
+        alert("AITR ORB: 15:55 NY — CLOSE the open position on " + syminfo.ticker, alert.freq_once_per_bar_close)
+
+// ---------- visuals ----------
+plot(ema15, "EMA50 (15m)", color=color.new(color.orange, 0), linewidth=1)
+plotshape(longSig  and barstate.isconfirmed, "Long",  shape.triangleup,   location.belowbar, color.green, size=size.small)
+plotshape(shortSig and barstate.isconfirmed, "Short", shape.triangledown, location.abovebar, color.red,   size=size.small)
+bgcolor(inOR ? color.new(color.aqua, 92) : na, title="Opening range time")
+
+alertcondition(longSig,  "ORB Long",  "AITR ORB: BUY signal")
+alertcondition(shortSig, "ORB Short", "AITR ORB: SELL signal")
+
+if timeframe.period != "5" and barstate.islast
+    label.new(bar_index, high, "Use a 5-minute chart", color=color.orange, textcolor=color.black)
