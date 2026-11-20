@@ -8,7 +8,7 @@
 - Entries only during the first 90 minutes after the range; flat at 22:55 server time. One trade per symbol per day.
 - Risk halved in June and July (weaker months in the test).
 
-**Result (,000, 0.5% risk per trade, both symbols)**
+**Result ($5,000, 0.5% risk per trade, both symbols)**
 - End balance $64,224, profit factor 1.28, max drawdown 21.3%, 69% of months positive.
 - Years: 2021 +55%, 2022 +62%, 2023 +29%, 2024 +108%, 2025 +25%, 2026 (to 19 Nov) +52%.
 - Walk-forward check: all 36 parameter sets stayed profitable out of sample.
