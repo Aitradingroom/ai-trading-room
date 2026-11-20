@@ -16,9 +16,10 @@ New research is posted one topic at a time. Each post has its own folder with th
 | 5 | [G10 carry, momentum and value — and the swap trap in MT5 backtests](strategies/fx-g10-basket/) | Strategy research (failed) | MT5 |
 | 6 | [Time-series momentum on retail CFDs: overnight swap eats the trend](strategies/trend-portfolio/) | Strategy research (failed) | MT5 |
 | 7 | [Turtle-style pyramiding 2016–2026: adding to winners didn't save the trend](strategies/trend-pyramid/) | Strategy research (failed) | MT5 |
+| 8 | [MAP Levels: a free round-number price map](indicators/map-levels/) | Free indicator | TradingView |
 
 ## Coming next
-- MAP Levels: free round-number levels indicator
+- MAP Trend Rider: trend following on round-number levels, 2005–2026
 - …and more from our research log
 
 ## About
