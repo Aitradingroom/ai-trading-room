@@ -1,0 +1,17 @@
+21 years of trend following. The balance ended ≈70% lower. 📉
+
+We coded "MAP Trend Rider" and ran it in the MT5 Strategy Tester, 2005–2026:
+• Grid of round-number "MAP" price levels (spacing ≥ 1.5 × ATR)
+• Daily close beyond a level in the 200-day SMA direction → enter next open
+• Stop one level back, trailed level by level, no fixed target, 1% risk
+• Balance ≈ $10k → peak ≈ $13k (2014) → ≈ $3k (2026)
+• Lesson: one good decade can hide a long, slow bleed
+
+Caveat: one backtest, one setup; values are approximate, read off the MT5 balance chart. Backtests are not live results.
+
+Full code + write-up FREE on our GitHub — link in bio. MT5 EA + TradingView Pine script included.
+Next post: turn-of-the-month + IBS on an index basket.
+
+Research & education only, not financial advice.
+
+#trendfollowing #backtesting #algotrading #mt5 #tradingview #quanttrading #tradingstrategy #tradingeducation #github #aitrading

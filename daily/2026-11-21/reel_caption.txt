@@ -1,0 +1,17 @@
+$5,000 → $3.52 million. On paper. Here's why it's fake. 👀
+
+Our own 5-market portfolio backtest at 1% risk (2021–2026) printed $3.52M. Why we don't believe it:
+• Lot cap: positions hit the 100-lot broker max, so growth stalls in later years
+• Slippage: a backtest fills 100 lots at the quoted price — real markets don't
+• Selection bias: the markets were chosen after seeing the results
+• At 2% risk the max drawdown was 58% — more than half the account gone at one point
+
+Check instead: first-year return, max drawdown, worst month, % of months positive, out-of-sample period.
+
+Chart in the video is a synthetic illustration, not real data. Backtests are not live results.
+
+Full test free on our GitHub — link in bio.
+
+Research & education only, not financial advice.
+
+#backtesting #compounding #algotrading #tradingeducation #riskmanagement #mt5 #quanttrading #tradingpsychology #github #aitrading
