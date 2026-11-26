@@ -1,0 +1,17 @@
+−50% needs +100% just to get back to break-even. 📉➡️📈
+
+Drawdown math every trader should know — checked against the real max drawdowns from our own MT5 backtests (2021–2026):
+
+• The rule: gain needed = loss ÷ (1 − loss). −20% needs +25%, −30% needs +42.9%, −70% needs +233%.
+• NY ORB on US500 + NAS100 at 0.5% risk: max drawdown 21.3% → +27.1% to recover.
+• Our 5-market portfolio: 33.5% drawdown at 1% risk (+50.4% to recover), 58% at 2% risk (+138.1%).
+• The viral IVB rules on US500: 70.9% drawdown → +243.6% to recover.
+• Our lesson after testing 5 drawdown tricks: the most reliable control is a smaller risk per trade.
+
+Caveat: these are backtests on broker demo data, not live results. The recovery math ignores spread, swap and slippage, and the portfolio markets were picked after seeing results (selection bias).
+
+Full code + write-ups FREE on our GitHub — link in bio. ⭐
+
+Research & education only, not financial advice.
+
+#tradingeducation #riskmanagement #drawdown #backtesting #algotrading #forextrading #daytrading #mt5 #tradingview #github

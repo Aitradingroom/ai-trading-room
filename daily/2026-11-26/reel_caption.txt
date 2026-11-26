@@ -1,0 +1,18 @@
++97.5R in the backtest… −36.6R on new data. 😬
+
+We ran the New York opening range breakout on forex (EURUSD, GBPUSD) and split the test in two: train 2021–2024, test 2025–2026.
+
+• EURUSD: +97.5R in-sample → −36.6R out-of-sample
+• GBPUSD: +3.7R → −54.0R
+• Our NY ORB on US500/NAS100 stayed profitable in walk-forward checks — that edge is tied to indices at the NY cash open, not forex
+• On forex, the London open mattered more than New York
+
+A result that only works in one period is not an edge. Always test on data you didn't tune on.
+
+Chart in the video = synthetic candles (illustration). Results are MT5 backtests on broker demo data, not live results.
+
+Full test + code FREE on our GitHub — link in bio.
+
+Research & education only, not financial advice.
+
+#backtesting #algotrading #forextrading #openingrangebreakout #tradingstrategy #outofsample #daytrading #mt5 #tradingeducation #github
