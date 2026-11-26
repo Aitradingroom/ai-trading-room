@@ -17,9 +17,10 @@ New research is posted one topic at a time. Each post has its own folder with th
 | 6 | [Time-series momentum on retail CFDs: overnight swap eats the trend](strategies/trend-portfolio/) | Strategy research (failed) | MT5 |
 | 7 | [Turtle-style pyramiding 2016–2026: adding to winners didn't save the trend](strategies/trend-pyramid/) | Strategy research (failed) | MT5 |
 | 8 | [MAP Levels: a free round-number price map](indicators/map-levels/) | Free indicator | TradingView |
+| 9 | [MAP Trend Rider: trend following on round-number levels, 2005–2026](strategies/map-trend-rider/) | Strategy research (failed) | MT5 + TradingView |
 
 ## Coming next
-- MAP Trend Rider: trend following on round-number levels, 2005–2026
+- Turn-of-the-month + IBS on an index basket
 - …and more from our research log
 
 ## About

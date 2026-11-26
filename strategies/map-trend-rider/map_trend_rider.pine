@@ -1,0 +1,75 @@
+//@version=6
+strategy("MAP Trend Rider", overlay=true, initial_capital=10000, commission_type=strategy.commission.percent, commission_value=0.004, pyramiding=0, max_lines_count=10)
+
+// MAP Trend Rider — trend following that uses the MAP level grid as its structure.
+// 1. Grid: the MAP tier (A, B, C ... halvings of d×10^k) whose spacing is >= x × ATR.
+// 2. Filter: trade only in the direction of the 200 SMA.
+// 3. Entry: a bar closes beyond a MAP level in the trend direction → enter at next open.
+// 4. Stop: one grid level beyond the broken level.
+// 5. Trail: the stop follows price one level at a time (always two levels behind the close's level).
+// 6. No fixed target: let the trend run until the trailing stop is hit.
+
+G1 = "Grid"
+mAtr    = input.float(1.5, "Grid spacing >= x × ATR", minval=0.5, step=0.1, group=G1)
+atrLen  = input.int(50, "ATR length", minval=5, group=G1)
+G2 = "Rules"
+useTrend   = input.bool(true, "Trend filter (SMA)", group=G2)
+maLen      = input.int(200, "SMA length", minval=20, group=G2)
+allowLong  = input.bool(true, "Long trades", group=G2)
+allowShort = input.bool(true, "Short trades", group=G2)
+riskPct    = input.float(1.0, "Risk per trade (% of equity)", minval=0.1, step=0.1, group=G2)
+startYear  = input.int(1990, "Start year", group=G2)
+G3 = "Display"
+showGrid = input.bool(true, "Show the grid levels used by the strategy", group=G3)
+
+float atr = ta.atr(atrLen)
+float sma = ta.sma(close, maLen)
+
+f_grid(float p, float a) =>
+    int k = int(math.floor(math.log10(p)))
+    float step = math.pow(10, k)
+    int depth = int(math.floor(math.log(step / (mAtr * a)) / math.log(2)))
+    depth := math.max(0, math.min(15, depth))
+    step / math.pow(2, depth)
+
+bool ready = not na(atr) and not na(sma) and close > 0 and year >= startYear
+float gNow = ready ? f_grid(close, atr) : na
+float Lb = ready ? math.floor(close / gNow) * gNow : na
+float La = ready ? math.ceil(close / gNow) * gNow : na
+
+var float g = na
+var float trail = na
+
+// trail the stop on every close while in a trade
+if strategy.position_size > 0
+    trail := math.max(trail, (math.floor(close / g) - 1) * g)
+else if strategy.position_size < 0
+    trail := math.min(trail, (math.ceil(close / g) + 1) * g)
+
+bool flat = strategy.position_size == 0
+bool upOk = not useTrend or close > sma
+bool dnOk = not useTrend or close < sma
+bool longSig  = ready and flat and allowLong and upOk and close[1] < Lb
+bool shortSig = ready and flat and allowShort and dnOk and close[1] > La
+
+if longSig
+    g := gNow
+    trail := Lb - gNow
+    float qty = riskPct / 100 * strategy.equity / math.max(close - trail, syminfo.mintick)
+    strategy.entry("Long", strategy.long, qty=qty)
+else if shortSig
+    g := gNow
+    trail := La + gNow
+    float qty = riskPct / 100 * strategy.equity / math.max(trail - close, syminfo.mintick)
+    strategy.entry("Short", strategy.short, qty=qty)
+
+strategy.exit("XL", "Long", stop=trail)
+strategy.exit("XS", "Short", stop=trail)
+
+bool inTrade = strategy.position_size != 0 or longSig or shortSig
+plot(inTrade ? trail : na, "Trailing stop", color=color.new(#ef5350, 0), style=plot.style_linebr, linewidth=2)
+plot(showGrid ? Lb : na, "Grid below", color=color.new(#f5c542, 60), style=plot.style_stepline)
+plot(showGrid ? La : na, "Grid above", color=color.new(#f5c542, 60), style=plot.style_stepline)
+plot(useTrend ? sma : na, "SMA", color=color.new(#42a5f5, 40))
+plotshape(longSig, "Long signal", shape.triangleup, location.belowbar, color.new(#26a69a, 0), size=size.tiny)
+plotshape(shortSig, "Short signal", shape.triangledown, location.abovebar, color.new(#ef5350, 0), size=size.tiny)
