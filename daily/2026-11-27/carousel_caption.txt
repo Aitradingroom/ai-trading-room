@@ -1,0 +1,17 @@
+68% passed. ~30% failed. Here's the honest prop-challenge backtest of our robot. 👇
+
+We ran AITR Prop Guardian through a 1-step challenge simulation (10% target, rolling start dates, slippage included) on Alpari-MT5 data, Jan 2021 – Nov 2026:
+
+• About 68% of simulated challenges passed, about 30% failed
+• Median time to pass: 29 trading days
+• 5 guards always on: 2.5% daily loss guard, 5.5% max loss guard, auto-stop at target, 3% open-risk cap, stop loss on every trade (no martingale, no grid)
+• Funded-mode backtest ($25k start): +$54,955, max drawdown 6.8%, profit factor 1.29, 54 of 71 months positive
+• Markets: GER40, GBPJPY, US500, NAS100, XAUUSD
+
+Caveat: these are backtests, not live results. Nearly 1 in 3 simulated challenges still failed, and the worst funded-mode month was −3.0%.
+
+Want the rules on your side? DM us ROBOT for access.
+
+Backtest results. Past performance does not guarantee future results. Not financial advice.
+
+#propfirm #fundedtrader #propfirmchallenge #algotrading #mt5 #expertadvisor #tradingrobot #forextrading #nas100 #xauusd

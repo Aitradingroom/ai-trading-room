@@ -1,0 +1,16 @@
+Same strategy. $175.5K or $383K? The difference is the drawdown. 📉
+
+Both robots trade the same opening-range breakout, $25k start, backtest Jan 2021 – Nov 2026:
+
+• AITR ORB Steady (0.25% risk, gold 0.8%): $25k → $175.5k, max drawdown 8.3%, every calendar year positive
+• AITR ORB Growth (0.5% risk, gold 1.0%): $25k → $383k, max drawdown 28.8%, 2023 −1.2%
+• Worst month: −3.7% vs −9.4%
+• Steady also has drawdown brakes: risk halves below −4% from peak, quarters below −7%
+
+Bigger number = bigger drops along the way. Pick the drawdown you can actually sit through.
+
+DM us ROBOT for access.
+
+Backtest results. Past performance does not guarantee future results. Not financial advice.
+
+#algotrading #tradingrobot #mt5 #expertadvisor #forextrading #riskmanagement #drawdown #daytrading #xauusd #tradingstrategy
